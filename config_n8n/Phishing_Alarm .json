@@ -1,0 +1,517 @@
+{
+  "name": "Phishing Alarm",
+  "nodes": [
+    {
+      "parameters": {
+        "format": "resolved",
+        "options": {
+          "forceReconnect": 1
+        }
+      },
+      "id": "7e27a216-a9c3-4a51-b3b5-e4a7067d3808",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        -120
+      ],
+      "notesInFlow": true,
+      "credentials": {
+        "imap": {
+          "id": "BaXnuqm9q4K8AeVh",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "18303ab8-2d8e-4365-82f9-e827718abd73",
+              "name": "email_content",
+              "value": "=Headers: {{ $json.headers }}\nHTML: {{ $json.html }}\nTexto: {{ $json.text }}{{ $json.textAsHtml }}\nSuject: {{ $json.subject }}\nDia: {{ $json.date }}\nPara: {{ $json.to }}\nDe: {{ $json.from }}\nID: {{ $json.messageId }}\n\n",
+              "type": "string"
+            },
+            {
+              "id": "58ef222e-7c2d-4a45-bdb4-49860f171ca0",
+              "name": "from",
+              "value": "={{ $json.from.value[0].address }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dfc89b63-a454-4a31-85d5-9838de49a41c",
+      "name": "Genera JSON Email Content",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.0.20:5000/analyze",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5f48aacf-5ac5-40c7-b872-460b8013e60b",
+      "name": "HTTP Request Virus Total",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -440
+      ],
+      "executeOnce": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "df28db61-bf45-483d-8f4b-7c937927130a",
+              "leftValue": "attachment_0",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "id": "2c5292db-a90b-472a-a2f9-0fbdc9b4ba21",
+      "name": "If Adjuntos",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -120
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener los adjuntos del item actual (vienen en la propiedad 'binary')\nconst attachments = $input.all()[0].binary;\n\n// Crear un nuevo array de ítems, uno por cada adjunto\nconst items = [];\n\nfor (const key in attachments) {\n    if (attachments.hasOwnProperty(key)) {\n        items.push({\n            json: {},  // Si necesitas datos JSON adicionales, puedes agregarlos aquí.\n            binary: {\n                data: attachments[key],  // Mover el adjunto a la propiedad 'data'.\n            },\n        });\n    }\n}\n\nreturn items;\n"
+      },
+      "id": "a8f32383-8b9c-478b-a590-492cd146e45d",
+      "name": "Iteracion Adjuntos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener el contenido del correo desde el primer output (Genera JSON Email Content)\nconst emailContent = $items(\"Genera JSON Email Content\")[0].json.email_content;\nconst emailFrom = $items(\"Genera JSON Email Content\")[0].json.from; // Agregar el campo 'from'\n\n// Obtener los datos del análisis de VirusTotal desde el segundo output (HTTP Request Virus Total)\nconst virusTotalData = $items(\"HTTP Request Virus Total\")[0].json;\n\n// Comprobar si ambos datos están presentes\nif (!emailContent || !virusTotalData || !emailFrom) {\n    throw new Error('Faltan datos de entrada. Asegúrate de que ambos nodos estén proporcionando datos.');\n}\n\n// Formatear el mensaje combinando el contenido del correo y el estado del archivo adjunto\nconst combinedEmailContent = ${emailContent}. El adjunto tiene un Status de: ${virusTotalData.is_malicious ? 'malicioso' : 'no malicioso'};\n\n// Crear un nuevo objeto JSON que combine ambos\nconst combinedData = {\n    email_content: combinedEmailContent,\n    from: emailFrom // Agregar el campo 'from' al JSON\n};\n\n// Retornar el nuevo JSON combinado en un array\nreturn [\n    {\n        json: combinedData\n    }\n];"
+      },
+      "id": "d3e8f900-2852-407e-955f-6f330fe97b4f",
+      "name": "Unificacion de Contenido de Correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        -280
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "=sfernandez@ironbox.com.ar",
+        "toEmail": "={{ $json.from }}",
+        "subject": "Analisis de Phishing",
+        "html": "={{ $json.formatted_html }}",
+        "options": {}
+      },
+      "id": "2236290a-35ba-44cb-bdc8-2ffce6ecc64c",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1140,
+        80
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "DSWiqNLnsvGf2Pku",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "911a9550-dcf9-4bf2-843b-61e18d9a62b2",
+      "name": "No Operation, do nothing",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "18303ab8-2d8e-4365-82f9-e827718abd73",
+              "name": "email_content",
+              "value": "=Headers: {{ $json.headers }}\nHTML: {{ $json.html }}\nTexto: {{ $json.text }}{{ $json.textAsHtml }}\nSuject: {{ $json.subject }}\nDia: {{ $json.date }}\nPara: {{ $json.to }}\nDe: {{ $json.from }}\nID: {{ $json.messageId }}\n\n",
+              "type": "string"
+            },
+            {
+              "id": "58ef222e-7c2d-4a45-bdb4-49860f171ca0",
+              "name": "from",
+              "value": "={{ $json.from.value[0].address }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3db7a627-42f4-404f-8959-a24c1aa4f268",
+      "name": "Genera JSON Email Content con Adjuntos",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        280,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.0.20:5000/analyze_email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=email_content",
+              "value": "={{ $json.email_content }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8de65755-d039-4c02-8f2f-c07f3b97955b",
+      "name": "HTTP Request Ollama con Adjuntos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.0.20:5000/format_text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.analysis_result.result.message.content }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.analysis_result.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90d67dac-0332-4025-a819-f8b6b5d2a007",
+      "name": "HTTP Request Format Text To HTML HTTP Request Ollama con Adjuntos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        -280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.0.20:5000/analyze_email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=email_content",
+              "value": "={{ $json.email_content }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "86b321cd-0d92-458e-8bb4-0fde0475cdb1",
+      "name": "HTTP Request Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.0.20:5000/format_text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.analysis_result.result.message.content }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.analysis_result.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7f34c157-887e-472c-b11d-a41731ef451d",
+      "name": "HTTP Request Format Text To HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "=sfernandez@ironbox.com.ar",
+        "toEmail": "={{ $json.from }}",
+        "subject": "Analisis de Phishing",
+        "html": "={{ $json.formatted_html }}",
+        "options": {}
+      },
+      "id": "63d871f3-b209-4fe3-be76-43244c633d00",
+      "name": "Send Email1",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1140,
+        -280
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "DSWiqNLnsvGf2Pku",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "If Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Genera JSON Email Content": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Virus Total": {
+      "main": [
+        [
+          {
+            "node": "Unificacion de Contenido de Correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Iteracion Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Genera JSON Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iteracion Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Virus Total",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Genera JSON Email Content con Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unificacion de Contenido de Correo": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Ollama con Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Genera JSON Email Content con Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Unificacion de Contenido de Correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Ollama con Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Format Text To HTML HTTP Request Ollama con Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Ollama": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Format Text To HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Format Text To HTML": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Format Text To HTML HTTP Request Ollama con Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Send Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email1": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "822d39ea-ccf4-47c4-a9d5-ef6653dd3986",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "607d83bb40b9f0a00a3af0bead822463bcb716a69cc1cff480940f371424806e"
+  },
+  "id": "CnZ0Cnrz3QibfbIw",
+  "tags": []
+}
