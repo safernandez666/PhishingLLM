@@ -190,14 +190,17 @@ def analyze_email():
         model_messages = [
             {
                 "role": "system",
-                "content": "Analyze the provided email content and metadata to determine if it's a potential phishing attempt. Provide your analysis in a structured format matching the SimplePhishingAnalysis model. Important the response in HTML Format",
+                "content": (
+                    "Formatea el texto proporcionado en HTML. El título debe estar en rojo si es Phishing, en verde si no lo es. "
+                    "La salida debe estar correctamente estructurada como código HTML, sin ningún comentario adicional. "
+                    "Solo devuelve el HTML final listo para su visualización, sin explicaciones o anotaciones sobre el formato."
+                )
             },
             {
                 "role": "user",
-                "content": email_content,  # Aquí se incluye el contenido del correo
+                "content": text  # Aquí se incluye el texto a formatear
             }
         ]
-
         # Llamada al modelo local de Ollama para analizar el correo
         response = ollama.chat(
             model=os.getenv('OLLAMA_MODEL', 'gemma2:9b-instruct-q4_K_M'),  # Usar la variable de entorno para el modelo
